@@ -1,25 +1,34 @@
-# Earned — Mac Setup
+# CodeFocus — Mac Setup
 
-Connects **Claude Code** on your Mac to the **Earned** iPhone app over Bluetooth.
-When Claude Code is working, Earned unlocks your distracting apps; when it stops, they lock again.
+Connects **Claude Code** (or another AI coding agent) on your Mac to the **CodeFocus** iPhone app over Bluetooth.
+Your phone unlocks while your agent is working — and locks again the moment it stops.
 
 ## Install
 
+Paste this into your Mac's **Terminal** and hit Enter:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonasmuth04-pixel/earned-mac/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/codefocusapp/mac/main/install.sh | bash
 ```
 
-The script:
-- compiles a tiny Bluetooth peripheral locally (no notarization, fully readable source),
-- adds hooks to your `~/.claude/settings.json` that report when Claude is active/idle (existing hooks are preserved),
-- installs a LaunchAgent so it runs automatically at login.
+> Tip: hover the code block above and click the 📋 copy button.
+
+## What it does
+
+- Compiles a tiny Bluetooth peripheral locally — no notarization, fully readable source.
+- Adds hooks to your `~/.claude/settings.json` so it knows when your agent is active (your existing hooks stay untouched).
+- Installs a LaunchAgent so it runs automatically at login.
+
+When everything's set up, open the **CodeFocus** app on your iPhone and connect.
 
 ## Requirements
+
 - macOS
 - [Claude Code](https://claude.com/claude-code)
-- Xcode Command Line Tools (`xcode-select --install`)
+- Xcode Command Line Tools — install with `xcode-select --install`
 
 ## Uninstall
+
 ```bash
 launchctl unload ~/Library/LaunchAgents/app.earned.peripheral.plist
 rm -rf ~/.earned ~/Library/LaunchAgents/app.earned.peripheral.plist
