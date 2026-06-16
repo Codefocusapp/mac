@@ -2,7 +2,7 @@
 #
 # CodeFocus — Mac Setup
 # Verbindet Claude Code mit der CodeFocus iPhone-App über Bluetooth.
-# Nutzung:  curl -fsSL https://raw.githubusercontent.com/codefocusapp/mac/main/install.sh | bash
+# Nutzung:  curl -fsSL https://raw.githubusercontent.com/codefocusapp/setup/main/install.sh | bash
 #
 set -e
 
