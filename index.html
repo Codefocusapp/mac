@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeFocus — Support &amp; Setup</title>
+<style>
+  :root{--o:#D97757;--ink:#0A0A0A;--mut:#71717A;--line:#E2E2E5;--elev:#F4F4F5;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fff;color:var(--ink);line-height:1.6;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+  .wrap{max-width:720px;margin:0 auto;padding:64px 22px 96px;}
+  .logo{font-size:34px;font-weight:800;letter-spacing:-1px;}
+  .logo .o{color:var(--o);}
+  .tag{color:var(--mut);font-size:16px;margin:6px 0 36px;}
+  h2{font-size:18px;margin:36px 0 10px;}
+  p,li{font-size:15px;color:#27272A;}
+  a{color:var(--o);}
+  .cmd{background:var(--elev);border:1px solid var(--line);border-radius:8px;
+    padding:16px;font-size:13px;overflow-x:auto;white-space:nowrap;margin:10px 0;}
+  .pill{display:inline-block;background:rgba(217,119,87,.12);color:var(--o);
+    border-radius:6px;padding:3px 10px;font-size:13px;font-weight:700;}
+  hr{border:0;border-top:1px solid var(--line);margin:40px 0;}
+  .foot{color:var(--mut);font-size:13px;}
+  .foot a{color:var(--mut);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">Code<span class="o">Focus</span></div>
+  <div class="tag">Phone time while your AI codes. Locks when it stops.</div>
+
+  <p>CodeFocus locks distracting apps on your iPhone — TikTok, Instagram, whatever
+  eats your day — and only unlocks them while an AI coding agent (like Claude Code)
+  is actually running on your Mac. It stops, your apps lock. No willpower. Pure leverage.</p>
+
+  <h2>Set up your Mac</h2>
+  <p>Paste this once in your Mac's Terminal — it connects Claude Code to CodeFocus over Bluetooth:</p>
+  <div class="cmd">curl -fsSL https://raw.githubusercontent.com/codefocusapp/setup/main/install.sh | bash</div>
+  <p><span class="pill">Requires a Mac</span> &nbsp;running Claude Code + Bluetooth on both devices.</p>
+
+  <h2>Support</h2>
+  <p>Questions, bugs, or feedback? Email
+  <a href="mailto:jonas.muth@yahoo.de">jonas.muth@yahoo.de</a> — we usually reply within a day or two.</p>
+
+  <h2>Privacy</h2>
+  <p>CodeFocus collects nothing — no account, no servers, no tracking. Your data never
+  leaves your device. Details in the <a href="privacy.html">Privacy Policy</a>.</p>
+
+  <hr>
+  <p class="foot">
+    <a href="privacy.html">Privacy Policy</a> &nbsp;·&nbsp;
+    <a href="terms.html">Terms of Use</a> &nbsp;·&nbsp;
+    <a href="https://github.com/codefocusapp/setup">Open-source setup script</a><br>
+    © 2026 CodeFocus.
+  </p>
+</div>
+</body>
+</html>
