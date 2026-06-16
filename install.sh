@@ -20,8 +20,8 @@ warn() { printf "\033[33m!\033[0m %s\n" "$1"; }
 die()  { printf "\033[31m✗ %s\033[0m\n" "$1"; exit 1; }
 
 echo ""
-bold "🔒 Earned — Mac Setup"
-echo "Verbindet Claude Code mit deiner Earned iPhone-App."
+bold "🔒 CodeFocus — Mac Setup"
+echo "Verbindet Claude Code mit deiner CodeFocus iPhone-App."
 echo ""
 
 # ---------- 1. Checks ----------
@@ -82,6 +82,12 @@ final class Peripheral: NSObject, CBPeripheralManagerDelegate {
         }
     }
     func peripheralManagerDidUpdateState(_ p: CBPeripheralManager) {
+        let names = ["unknown","resetting","unsupported","unauthorized","poweredOff","poweredOn"]
+        let s = p.state.rawValue
+        print("Earned: Bluetooth-Status =", s >= 0 && s < names.count ? names[s] : "\(s)")
+        if p.state == .unauthorized {
+            print("Earned: ⚠️ Keine Bluetooth-Erlaubnis. Systemeinstellungen → Datenschutz → Bluetooth → earned-ble aktivieren.")
+        }
         guard p.state == .poweredOn else { return }
         last = readState()
         characteristic = CBMutableCharacteristic(type: kCharacteristicUUID,
@@ -182,7 +188,7 @@ echo ""
 bold "Beim ersten Start fragt macOS nach Bluetooth-Erlaubnis → bitte erlauben."
 echo "(Falls kein Dialog kommt: Systemeinstellungen → Datenschutz → Bluetooth → earned-ble aktivieren)"
 echo ""
-bold "Öffne jetzt die Earned-App auf deinem iPhone und verbinde dich."
+bold "Öffne jetzt die CodeFocus-App auf deinem iPhone und verbinde dich."
 echo ""
 echo "Status:    tail -f $EARNED_DIR/earned.log"
 echo "Entfernen: launchctl unload $PLIST && rm -rf $EARNED_DIR \"$PLIST\""
