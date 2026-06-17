@@ -81,6 +81,11 @@ final class Peripheral: NSObject, CBPeripheralManagerDelegate {
     var advertising = false
 
     func start() {
+        // Nach Mac-Neustart/Crash aufräumen: es läuft keine Session mehr. Marker leeren
+        // und State auf idle, damit kein „hängender" entsperrter Zustand übrig bleibt.
+        let home = NSHomeDirectory() as NSString
+        try? FileManager.default.removeItem(atPath: home.appendingPathComponent(".claude/codefocus-sessions"))
+        try? "idle".write(toFile: kStatePath, atomically: true, encoding: .utf8)
         manager = CBPeripheralManager(delegate: self, queue: nil)
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
     }
@@ -163,15 +168,54 @@ PLISTEOF
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 ok "CodeFocus.app erstellt (Bluetooth-Dialog zeigt \"CodeFocus\")"
 
-# ---------- 3. State-Datei ----------
-[ -f "$STATE_FILE" ] || printf idle > "$STATE_FILE"
+# ---------- 3. State-Datei + Session-Tracking ----------
+printf idle > "$STATE_FILE"
+mkdir -p "$CLAUDE_DIR/codefocus-sessions"
+
+# Hook-Helper: pflegt einen Marker pro Claude-Session und leitet daraus den
+# Gesamt-State ab. So bleibt die App entsperrt, solange IRGENDEIN Fenster arbeitet —
+# Fensterwechsel oder mehrere parallele Sessions führen nicht mehr zu Fehl-Locks.
+cat > "$CF_DIR/hook.py" <<'HOOKEOF'
+import sys, json, os
+
+mode = sys.argv[1] if len(sys.argv) > 1 else "add"
+claude = os.path.expanduser("~/.claude")
+sdir = os.path.join(claude, "codefocus-sessions")
+os.makedirs(sdir, exist_ok=True)
+
+# session_id kommt als JSON auf stdin (Claude-Code-Hook-Payload)
+try:
+    sid = (json.load(sys.stdin) or {}).get("session_id") or "default"
+except Exception:
+    sid = "default"
+sid = "".join(c for c in sid if c.isalnum() or c in "-_") or "default"  # Dateiname säubern
+marker = os.path.join(sdir, sid)
+
+if mode == "add":
+    open(marker, "w").close()          # Session arbeitet → Marker an
+else:
+    try:
+        os.remove(marker)              # Session fertig/geschlossen → Marker weg
+    except FileNotFoundError:
+        pass
+
+# active = solange noch IRGENDEIN Marker existiert
+active = False
+with os.scandir(sdir) as it:
+    for _ in it:
+        active = True
+        break
+
+with open(os.path.join(claude, "claude-state"), "w") as f:
+    f.write("active" if active else "idle")
+HOOKEOF
+ok "Session-Tracking installiert (mehrere Claude-Fenster werden korrekt zusammengeführt)"
 
 # ---------- 4. Claude-Hooks mergen (idempotent) ----------
 bold "Verbinde Claude Code (Hooks)…"
-"$PYTHON" - "$SETTINGS" <<'PYEOF'
+"$PYTHON" - "$SETTINGS" "$CF_DIR/hook.py" <<'PYEOF'
 import json, os, sys
-path = sys.argv[1]
-home_state = '"$HOME/.claude/claude-state"'  # via shell ausgewertet zur Hook-Laufzeit
+path, hook = sys.argv[1], sys.argv[2]
 cfg = {}
 if os.path.exists(path):
     try:
@@ -180,25 +224,37 @@ if os.path.exists(path):
         cfg = {}
 cfg.setdefault("hooks", {})
 
-def add(event, value):
-    arr = cfg["hooks"].setdefault(event, [])
-    cmd = "printf %s > %s" % (value, home_state)
-    # schon vorhanden? (idempotent)
+# Alte CodeFocus/Earned-Hooks entfernen (frühere "printf … > claude-state" sowie
+# vorherige hook.py-Einträge) — damit Mehrfach-Installation sauber migriert statt
+# zu duplizieren. Fremde Hooks bleiben unangetastet.
+def strip_ours(arr):
+    out = []
     for group in arr:
-        for h in group.get("hooks", []):
-            if h.get("command", "").strip() == cmd:
-                return
-    arr.append({"hooks": [{"type": "command", "command": cmd}]})
+        kept = [h for h in group.get("hooks", [])
+                if "claude-state" not in h.get("command", "")
+                and "codefocus/hook.py" not in h.get("command", "")]
+        if kept:
+            group["hooks"] = kept
+            out.append(group)
+    return out
 
-add("UserPromptSubmit", "active")
-add("Stop", "idle")
-add("SessionEnd", "closed")
+for ev in ("UserPromptSubmit", "Stop", "SessionEnd"):
+    if ev in cfg["hooks"]:
+        cfg["hooks"][ev] = strip_ours(cfg["hooks"][ev])
+
+def add(event, mode):
+    arr = cfg["hooks"].setdefault(event, [])
+    arr.append({"hooks": [{"type": "command", "command": "python3 %s %s" % (hook, mode)}]})
+
+add("UserPromptSubmit", "add")     # Prompt ab → Marker an
+add("Stop", "remove")              # Antwort fertig → Marker weg
+add("SessionEnd", "remove")        # Session zu → Marker weg
 
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2)
 print("hooks ok")
 PYEOF
-ok "Hooks in settings.json eingetragen (bestehende unangetastet)"
+ok "Hooks aktualisiert (Session-basiert; fremde Hooks unangetastet)"
 
 # ---------- 5. LaunchAgent (Autostart) ----------
 bold "Richte Autostart ein…"
