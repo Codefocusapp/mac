@@ -16,8 +16,13 @@
   h2{font-size:18px;margin:36px 0 10px;}
   p,li{font-size:15px;color:#27272A;}
   a{color:var(--o);}
-  .cmd{background:var(--elev);border:1px solid var(--line);border-radius:8px;
-    padding:16px;font-size:13px;overflow-x:auto;white-space:nowrap;margin:10px 0;}
+  .cmd{display:flex;align-items:center;gap:10px;background:var(--elev);
+    border:1px solid var(--line);border-radius:8px;padding:10px 10px 10px 16px;margin:10px 0;}
+  .cmd code{flex:1;min-width:0;font-size:13px;overflow-x:auto;white-space:nowrap;
+    font-family:inherit;-webkit-overflow-scrolling:touch;}
+  .copy{flex:none;background:var(--o);color:#fff;border:0;border-radius:6px;
+    padding:8px 14px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+  .copy:active{opacity:.8;}
   .pill{display:inline-block;background:rgba(217,119,87,.12);color:var(--o);
     border-radius:6px;padding:3px 10px;font-size:13px;font-weight:700;}
   .btn{display:inline-block;background:var(--o);color:#fff !important;text-decoration:none;
@@ -45,12 +50,15 @@
   <div class="step">STEP 2 — CONNECT YOUR MAC</div>
   <h2>Set up your Mac</h2>
   <p>Paste this once in your Mac's Terminal — it connects Claude Code to CodeFocus over Bluetooth:</p>
-  <div class="cmd">curl -fsSL https://raw.githubusercontent.com/codefocusapp/setup/main/install.sh | bash</div>
+  <div class="cmd">
+    <code id="installcmd">curl -fsSL https://raw.githubusercontent.com/codefocusapp/setup/main/install.sh | bash</code>
+    <button class="copy" onclick="copyCmd(this)">Copy</button>
+  </div>
   <p><span class="pill">Requires a Mac</span> &nbsp;running Claude Code + Bluetooth on both devices.</p>
 
   <h2>Support</h2>
   <p>Questions, bugs, or feedback? Email
-  <a href="mailto:jonas.muth@yahoo.de">jonas.muth@yahoo.de</a> — we usually reply within a day or two.</p>
+  <a href="mailto:jonas.muth.04@gmail.com">jonas.muth.04@gmail.com</a> — we usually reply within a day or two.</p>
 
   <h2>Privacy</h2>
   <p>CodeFocus collects nothing — no account, no servers, no tracking. Your data never
@@ -60,9 +68,17 @@
   <p class="foot">
     <a href="privacy.html">Privacy Policy</a> &nbsp;·&nbsp;
     <a href="terms.html">Terms of Use</a> &nbsp;·&nbsp;
-    <a href="https://github.com/codefocusapp/setup">Open-source setup script</a><br>
+    <a href="https://github.com/codefocusapp/setup">Setup script</a><br>
     © 2026 CodeFocus.
   </p>
 </div>
+<script>
+function copyCmd(btn){
+  navigator.clipboard.writeText(document.getElementById('installcmd').textContent).then(function(){
+    var prev = btn.textContent; btn.textContent = 'Copied!';
+    setTimeout(function(){ btn.textContent = prev; }, 1600);
+  });
+}
+</script>
 </body>
 </html>

@@ -25,7 +25,7 @@ CodeFocus locks the distracting apps on your iPhone — TikTok, Instagram, whate
  └────────────────┘                 └────────────────┘
 ```
 
-A tiny open-source helper on your Mac reads whether Claude Code is actively working (straight from Claude's own session state) and advertises it over Bluetooth LE. Your iPhone reads that and locks/unlocks the apps you picked — in real time, fully on-device.
+A tiny helper on your Mac reads whether Claude Code is actively working (straight from Claude's own session state) and advertises it over Bluetooth LE. Your iPhone reads that and locks/unlocks the apps you picked — in real time, fully on-device.
 
 ## Setup — two parts
 
