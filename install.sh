@@ -64,14 +64,29 @@ import CoreBluetooth
 
 let kServiceUUID        = CBUUID(string: "CC1A0DE0-0000-1000-8000-00805F9B34FB")
 let kCharacteristicUUID = CBUUID(string: "CC1A0DE0-0001-1000-8000-00805F9B34FB")
-let kStatePath = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/claude-state")
+let kStatePath   = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/claude-state")
+let kSessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/sessions")
 
-// Reiner Inhalts-Check: "active" = entsperrt, bis Stop/SessionEnd "idle"/"closed" schreibt.
-// Kein Staleness-Timeout — sonst sperrt es in tool-call-losen Modes (langes Denken,
-// Plan-Mode, Rückfragen) fälschlich.
+// Liest Claude Codes EIGENE Session-Status-Dateien: ~/.claude/sessions/<pid>.json.
+// active(1) = irgendeine interaktive CLI-Session hat status "busy" (und der Prozess lebt).
+// "busy" steht den GANZEN Turn an — auch beim Denken/Plan-Mode (kein Timeout, keine
+// Fehl-Locks) — und flippt bei Fertigwerden UND bei ESC innerhalb ~1-2s auf "idle".
+// SDK-Sessions (z.B. claude-mem Observer, entrypoint "sdk-cli") werden ignoriert.
 func readState() -> UInt8 {
-    guard let raw = try? String(contentsOfFile: kStatePath, encoding: .utf8) else { return 0 }
-    return raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "active" ? 1 : 0
+    let fm = FileManager.default
+    guard let files = try? fm.contentsOfDirectory(atPath: kSessionsDir) else { return 0 }
+    for name in files where name.hasSuffix(".json") {
+        let path = (kSessionsDir as NSString).appendingPathComponent(name)
+        guard let data = fm.contents(atPath: path),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              (obj["entrypoint"] as? String) == "cli",
+              (obj["status"] as? String) == "busy"
+        else { continue }
+        // Prozess noch am Leben? Verhindert hängendes "busy" nach Crash/Kill.
+        if let pid = obj["pid"] as? Int, kill(pid_t(pid), 0) != 0 { continue }
+        return 1
+    }
+    return 0
 }
 
 final class Peripheral: NSObject, CBPeripheralManagerDelegate {
@@ -81,11 +96,8 @@ final class Peripheral: NSObject, CBPeripheralManagerDelegate {
     var advertising = false
 
     func start() {
-        // Nach Mac-Neustart/Crash aufräumen: es läuft keine Session mehr. Marker leeren
-        // und State auf idle, damit kein „hängender" entsperrter Zustand übrig bleibt.
-        let home = NSHomeDirectory() as NSString
-        try? FileManager.default.removeItem(atPath: home.appendingPathComponent(".claude/codefocus-sessions"))
-        try? "idle".write(toFile: kStatePath, atomically: true, encoding: .utf8)
+        // Initialen Zustand für den Simulator-Bridge schreiben (Host liest claude-state).
+        try? (readState() == 1 ? "active" : "idle").write(toFile: kStatePath, atomically: true, encoding: .utf8)
         manager = CBPeripheralManager(delegate: self, queue: nil)
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.poll() }
     }
@@ -94,6 +106,8 @@ final class Peripheral: NSObject, CBPeripheralManagerDelegate {
         let v = readState()
         characteristic.value = Data([v])   // immer aktuell halten — fürs aktive Re-Read vom iPhone
         if v != last {
+            // claude-state für den Simulator-Bridge spiegeln (Host liest diese Datei)
+            try? (v == 1 ? "active" : "idle").write(toFile: kStatePath, atomically: true, encoding: .utf8)
             // updateValue kann false liefern (Sende-Queue voll). Dann last NICHT setzen,
             // damit der nächste Poll den Notify erneut versucht (statt ihn zu verschlucken).
             if manager.updateValue(Data([v]), for: characteristic, onSubscribedCentrals: nil) {
@@ -168,65 +182,28 @@ PLISTEOF
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 ok "CodeFocus.app erstellt (Bluetooth-Dialog zeigt \"CodeFocus\")"
 
-# ---------- 3. State-Datei + Session-Tracking ----------
-printf idle > "$STATE_FILE"
-mkdir -p "$CLAUDE_DIR/codefocus-sessions"
+# ---------- 3. State-Datei + alte Mechanik aufräumen ----------
+# Der Peripheral-Dienst liest Claude Codes EIGENE Session-Status (~/.claude/sessions/*.json)
+# und pflegt claude-state selbst (für den Simulator-Bridge). Keine Hooks mehr nötig.
+[ -f "$STATE_FILE" ] || printf idle > "$STATE_FILE"
+rm -f "$CF_DIR/hook.py" 2>/dev/null || true
+rm -rf "$CLAUDE_DIR/codefocus-sessions" 2>/dev/null || true
 
-# Hook-Helper: pflegt einen Marker pro Claude-Session und leitet daraus den
-# Gesamt-State ab. So bleibt die App entsperrt, solange IRGENDEIN Fenster arbeitet —
-# Fensterwechsel oder mehrere parallele Sessions führen nicht mehr zu Fehl-Locks.
-cat > "$CF_DIR/hook.py" <<'HOOKEOF'
-import sys, json, os
-
-mode = sys.argv[1] if len(sys.argv) > 1 else "add"
-claude = os.path.expanduser("~/.claude")
-sdir = os.path.join(claude, "codefocus-sessions")
-os.makedirs(sdir, exist_ok=True)
-
-# session_id kommt als JSON auf stdin (Claude-Code-Hook-Payload)
-try:
-    sid = (json.load(sys.stdin) or {}).get("session_id") or "default"
-except Exception:
-    sid = "default"
-sid = "".join(c for c in sid if c.isalnum() or c in "-_") or "default"  # Dateiname säubern
-marker = os.path.join(sdir, sid)
-
-if mode == "add":
-    open(marker, "w").close()          # Session arbeitet → Marker an
-else:
-    try:
-        os.remove(marker)              # Session fertig/geschlossen → Marker weg
-    except FileNotFoundError:
-        pass
-
-# active = solange noch IRGENDEIN Marker existiert
-active = False
-with os.scandir(sdir) as it:
-    for _ in it:
-        active = True
-        break
-
-with open(os.path.join(claude, "claude-state"), "w") as f:
-    f.write("active" if active else "idle")
-HOOKEOF
-ok "Session-Tracking installiert (mehrere Claude-Fenster werden korrekt zusammengeführt)"
-
-# ---------- 4. Claude-Hooks mergen (idempotent) ----------
-bold "Verbinde Claude Code (Hooks)…"
-"$PYTHON" - "$SETTINGS" "$CF_DIR/hook.py" <<'PYEOF'
+# ---------- 4. Frühere CodeFocus-Hooks entfernen ----------
+# Neuer Ansatz braucht keine Hooks — unsere alten Einträge (printf claude-state / hook.py)
+# werden entfernt, fremde Hooks bleiben unangetastet.
+bold "Räume frühere Hooks auf…"
+"$PYTHON" - "$SETTINGS" <<'PYEOF'
 import json, os, sys
-path, hook = sys.argv[1], sys.argv[2]
-cfg = {}
-if os.path.exists(path):
-    try:
-        with open(path) as f: cfg = json.load(f)
-    except Exception:
-        cfg = {}
-cfg.setdefault("hooks", {})
+path = sys.argv[1]
+if not os.path.exists(path):
+    sys.exit(0)
+try:
+    cfg = json.load(open(path))
+except Exception:
+    sys.exit(0)
+hooks = cfg.get("hooks", {})
 
-# Alte CodeFocus/Earned-Hooks entfernen (frühere "printf … > claude-state" sowie
-# vorherige hook.py-Einträge) — damit Mehrfach-Installation sauber migriert statt
-# zu duplizieren. Fremde Hooks bleiben unangetastet.
 def strip_ours(arr):
     out = []
     for group in arr:
@@ -239,26 +216,15 @@ def strip_ours(arr):
     return out
 
 for ev in ("UserPromptSubmit", "Stop", "SessionEnd", "Notification"):
-    if ev in cfg["hooks"]:
-        cfg["hooks"][ev] = strip_ours(cfg["hooks"][ev])
+    if ev in hooks:
+        hooks[ev] = strip_ours(hooks[ev])
+        if not hooks[ev]:
+            del hooks[ev]
 
-def add(event, mode, matcher=None):
-    arr = cfg["hooks"].setdefault(event, [])
-    group = {"hooks": [{"type": "command", "command": "python3 %s %s" % (hook, mode)}]}
-    if matcher is not None:
-        group["matcher"] = matcher
-    arr.append(group)
-
-add("UserPromptSubmit", "add")                 # Prompt ab → Marker an
-add("Stop", "remove")                          # Antwort fertig → Marker weg
-add("SessionEnd", "remove")                    # Session zu → Marker weg
-add("Notification", "remove", "idle_prompt")   # zurück im Idle-Prompt (auch nach ESC!) → Marker weg
-
-with open(path, "w") as f:
-    json.dump(cfg, f, indent=2)
-print("hooks ok")
+json.dump(cfg, open(path, "w"), indent=2)
+print("cleaned")
 PYEOF
-ok "Hooks aktualisiert (Session-basiert; fremde Hooks unangetastet)"
+ok "Frühere Hooks entfernt (Status-Datei-Ansatz braucht keine Hooks)"
 
 # ---------- 5. LaunchAgent (Autostart) ----------
 bold "Richte Autostart ein…"
