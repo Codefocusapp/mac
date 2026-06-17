@@ -7,9 +7,7 @@ Setup has **two parts**: the iPhone app and a one-line Mac command.
 
 Download **CodeFocus** from the App Store on your iPhone:
 
-**📱 [ Download CodeFocus on the App Store ]**
-
-*(App Store link goes live at launch.)*
+**📱 [Download CodeFocus on the App Store](https://apps.apple.com/app/id6781040937)**
 
 ## 2. Connect your Mac
 
